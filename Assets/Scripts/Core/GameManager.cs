@@ -192,14 +192,72 @@ namespace Match3Ai.Core
         }
         
         /// <summary>
-        /// Create an element at grid position
+        /// Create an element at grid position (with fallback for asset-less mode)
         /// </summary>
         private void CreateElement(GameElement prefab, Vector2Int pos, ElementType type)
         {
-            GameElement element = Instantiate(prefab, gridManager.GetWorldPosition(pos), Quaternion.identity);
+            GameElement element;
+            
+            if (prefab != null)
+            {
+                element = Instantiate(prefab, gridManager.GetWorldPosition(pos), Quaternion.identity);
+            }
+            else
+            {
+                // Fallback: create a primitive GameObject with GameElement component
+                element = CreatePlaceholderElement(pos, type);
+            }
+            
             element.Initialize(type, pos);
             element.SetCell(gridManager.GetCell(pos));
             gridManager.PlaceElement(element, pos);
+        }
+        
+        /// <summary>
+        /// Create a placeholder element using primitive Unity shapes
+        /// Used when no prefab assets are available
+        /// </summary>
+        private GameElement CreatePlaceholderElement(Vector2Int pos, ElementType type)
+        {
+            // Create a primitive cube as the base object
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = $"Element_{type}_{pos.x}_{pos.y}";
+            go.transform.position = gridManager.GetWorldPosition(pos);
+            go.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+            
+            // Remove collider for gameplay elements (they're managed by grid)
+            Collider collider = go.GetComponent<Collider>();
+            if (collider != null) Destroy(collider);
+            
+            // Add GameElement component
+            GameElement element = go.AddComponent<GameElement>();
+            
+            // Set color based on element type
+            var renderer = go.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.material.color = GetColorForElementType(type);
+            }
+            
+            return element;
+        }
+        
+        /// <summary>
+        /// Get color for element type (shared with GameElement)
+        /// </summary>
+        private Color GetColorForElementType(ElementType type)
+        {
+            switch (type)
+            {
+                case ElementType.Red: return new Color(0.9f, 0.2f, 0.2f);
+                case ElementType.Orange: return new Color(1f, 0.5f, 0f);
+                case ElementType.Yellow: return new Color(1f, 0.9f, 0.2f);
+                case ElementType.Green: return new Color(0.2f, 0.8f, 0.2f);
+                case ElementType.Blue: return new Color(0.2f, 0.4f, 0.9f);
+                case ElementType.Purple: return new Color(0.6f, 0.2f, 0.8f);
+                case ElementType.ColorBomb: return new Color(1f, 1f, 1f);
+                default: return Color.gray;
+            }
         }
         
         /// <summary>
@@ -360,7 +418,7 @@ namespace Match3Ai.Core
         }
         
         /// <summary>
-        /// Spawn new elements at the top
+        /// Spawn new elements at the top (with fallback for asset-less mode)
         /// </summary>
         private IEnumerator SpawnNewElements()
         {
@@ -378,9 +436,20 @@ namespace Match3Ai.Core
                         
                         // Spawn above the grid and animate down
                         Vector2Int pos = new Vector2Int(x, y);
-                        GameElement element = Instantiate(prefab, 
-                            gridManager.GetWorldPosition(x, gridManager.Height + y - 1), 
-                            Quaternion.identity);
+                        Vector3 spawnPos = gridManager.GetWorldPosition(x, gridManager.Height + y - 1);
+                        
+                        GameElement element;
+                        if (prefab != null)
+                        {
+                            element = Instantiate(prefab, spawnPos, Quaternion.identity);
+                        }
+                        else
+                        {
+                            // Fallback: create a placeholder element
+                            element = CreatePlaceholderElement(pos, type);
+                            element.transform.position = spawnPos;
+                        }
+                        
                         element.Initialize(type, pos);
                         
                         float elapsed = 0;
